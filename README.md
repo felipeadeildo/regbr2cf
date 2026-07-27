@@ -8,12 +8,16 @@ nameservers Cloudflare assigns, and sets them on registro.br — the manual
 ## How it works
 
 1. Log in to registro.br (handles the emailed security code when required).
-2. List your domains and let you pick which to move.
-3. For each: create the zone on Cloudflare -> get its nameservers -> set them on
+2. List your domains and, for each, cross-check its migration status: the
+   nameservers currently set on registro.br vs. whether a Cloudflare zone exists
+   and is active.
+3. Let you pick which of the not-yet-migrated domains to move.
+4. For each: create the zone on Cloudflare -> get its nameservers -> set them on
    registro.br.
 
 Only domains with status **Publicado** can be edited — `Novo` (awaiting payment)
-and `Registrando` (still processing) are shown but not selectable.
+and `Registrando` (still processing) are shown but not selectable. Domains
+already **migrated** are shown but not offered again.
 
 ## Setup
 
@@ -47,6 +51,9 @@ response) and don't stop the rest.
 
 - The registro.br login session is cached in `.session.json` and reused across
   runs, so you won't re-enter the security code every time.
+- Migration status is cached in `.status-cache.json`. A `migrated` result is
+  final and never re-checked; anything still in flight is re-checked after ~1h,
+  so repeat runs skip the per-domain API calls for what's already done.
 - registro.br verifies the new nameservers are answering before accepting, so a
   just-created Cloudflare zone is retried for ~1 minute while it propagates.
 - Nameserver changes take effect after a propagation window (registro.br shows a

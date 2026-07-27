@@ -23,6 +23,17 @@ class Cloudflare:
     def __exit__(self, *exc: object) -> None:
         self._client.close()
 
+    def zone_status(self, fqdn: str) -> tuple[str, list[str]] | None:
+        """Return (status, nameservers) for the zone, or None if it doesn't exist.
+
+        Status is Cloudflare's zone status, e.g. "pending" or "active".
+        """
+        result = self._client.get("/zones", params={"name": fqdn}).json()["result"]
+        if not result:
+            return None
+        zone = result[0]
+        return zone["status"], zone["name_servers"]
+
     def zone_nameservers(self, fqdn: str) -> list[str]:
         """Return the zone's assigned nameservers, creating the zone if needed."""
         response = self._client.post(

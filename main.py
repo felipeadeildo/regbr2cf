@@ -16,11 +16,20 @@ from rich.table import Table
 import config
 from cloudflare import Cloudflare
 from registrobr import ChallengeRequired, Domain, RegistroBR
+from status import MIGRATED, Status, StatusChecker
 
 console = Console()
 
 STATUS_COLOR = {"Publicado": "green", "Novo": "cyan", "Registrando": "yellow"}
 LOG_DIR = Path(__file__).parent / "data"
+
+
+def verdict_color(verdict: str) -> str:
+    if verdict == MIGRATED:
+        return "green"
+    if verdict.startswith("not on") or "not set" in verdict:
+        return "red"
+    return "yellow"
 
 
 def log_error(fqdn: str, error: Exception) -> Path:
@@ -34,22 +43,30 @@ def log_error(fqdn: str, error: Exception) -> Path:
     return path
 
 
-def pick(domains: list[Domain]) -> list[Domain]:
-    """Show all domains with status; only editable ones are selectable."""
-    table = Table("#", "Domain", "Status")
+def pick(domains: list[Domain], statuses: dict[str, Status]) -> list[Domain]:
+    """Show domains with migration status; editable, non-migrated ones are selectable."""
+    table = Table("#", "Domain", "Status", "Migration", "registro.br NS")
     selectable: list[Domain] = []
     for d in domains:
+        st = statuses[d.fqdn]
         color = STATUS_COLOR.get(d.status, "white")
-        if d.editable:
+        # Already-migrated or non-editable domains aren't offered for migration.
+        if d.editable and not st.terminal:
             selectable.append(d)
             num = str(len(selectable))
         else:
             num = "[dim]-[/]"
-        table.add_row(num, d.fqdn, f"[{color}]{d.status}[/]")
+        table.add_row(
+            num,
+            d.fqdn,
+            f"[{color}]{d.status}[/]",
+            f"[{verdict_color(st.verdict)}]{st.verdict}[/]",
+            ", ".join(st.reg_ns) or "[dim]—[/]",
+        )
     console.print(table)
 
     if not selectable:
-        console.print("[red]No editable domains (all still processing).[/]")
+        console.print("[green]Nothing to migrate — all done or not editable.[/]")
         return []
     sel = Prompt.ask("Domains to move ('all' or e.g. 1,3,5)", default="all").strip()
     if sel.lower() == "all":
@@ -63,9 +80,9 @@ def main() -> None:
         RegistroBR() as reg,
         Cloudflare(config.CLOUDFLARE_API_TOKEN, config.CLOUDFLARE_ACCOUNT_ID) as cf,
     ):
-        console.print("Logging in...")
         try:
-            reg.login(config.REGISTROBR_USER, config.REGISTROBR_PASSWORD)
+            with console.status("Logging in..."):
+                reg.login(config.REGISTROBR_USER, config.REGISTROBR_PASSWORD)
         except ChallengeRequired:
             console.print("[yellow]A security code was emailed to you.[/]")
             reg.submit_challenge(Prompt.ask("Email code"))
@@ -75,7 +92,24 @@ def main() -> None:
             console.print("[red]No domains found.[/]")
             sys.exit(1)
 
-        chosen = pick(domains)
+        checker = StatusChecker(reg, cf)
+        statuses: dict[str, Status] = {}
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            console=console,
+            transient=True,
+        ) as progress:
+            task = progress.add_task("Checking status...", total=len(domains))
+            for d in domains:
+                progress.update(task, description=f"Checking [cyan]{d.fqdn}[/]")
+                statuses[d.fqdn] = checker.check(d.fqdn)
+                progress.advance(task)
+
+        chosen = pick(domains, statuses)
+        if not chosen:
+            return
+
         ok = 0
         failed = 0
         with Progress(
@@ -89,6 +123,7 @@ def main() -> None:
                 try:
                     ns = cf.zone_nameservers(d.fqdn)
                     reg.set_nameservers(d.fqdn, ns)
+                    checker.mark_migrated(d.fqdn, ns)
                     ok += 1
                     progress.console.print(f"[green]✓[/] {d.fqdn} → {', '.join(ns)}")
                 except Exception as e:  # noqa: BLE001 — log and keep going

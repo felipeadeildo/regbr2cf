@@ -137,6 +137,11 @@ class RegistroBR:
         data = self._client.get("/domains").json()["domains"]
         return [Domain(d["FQDN"], d["Status"]) for d in data]
 
+    def nameservers(self, fqdn: str) -> list[str]:
+        """Current nameservers configured for the domain."""
+        hosts = self._client.get(f"/domain/{fqdn}").json().get("Hosts", [])
+        return [h["Hostname"] for h in hosts if h.get("Hostname")]
+
     def set_nameservers(self, fqdn: str, nameservers: list[str]) -> None:
         """Point a domain at the given nameservers (up to 6).
 
