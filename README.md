@@ -1,4 +1,4 @@
-# registro.br → Cloudflare
+# registro.br -> Cloudflare
 
 CLI to point [registro.br](https://registro.br) domains at Cloudflare
 nameservers. For each selected domain it creates a Cloudflare zone, reads the
@@ -9,7 +9,7 @@ nameservers Cloudflare assigns, and sets them on registro.br — the manual
 
 1. Log in to registro.br (handles the emailed security code when required).
 2. List your domains and let you pick which to move.
-3. For each: create the zone on Cloudflare → get its nameservers → set them on
+3. For each: create the zone on Cloudflare -> get its nameservers -> set them on
    registro.br.
 
 Only domains with status **Publicado** can be edited — `Novo` (awaiting payment)
@@ -31,7 +31,7 @@ cp .env.example .env   # then fill in the values
 | `REGISTROBR_USER`       | Your registro.br login handle (e.g. `ABCDE1`).                                                |
 | `REGISTROBR_PASSWORD`   | Your registro.br password.                                                                    |
 | `CLOUDFLARE_API_TOKEN`  | Cloudflare API token (**not** an `cfat_…` token) with `Account:Zone:Edit` + `Zone:Zone:Edit`. |
-| `CLOUDFLARE_ACCOUNT_ID` | Cloudflare account ID (Dashboard → any domain → Overview).                                    |
+| `CLOUDFLARE_ACCOUNT_ID` | Cloudflare account ID (Dashboard -> any domain -> Overview).                                  |
 
 ## Usage
 
